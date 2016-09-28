@@ -192,3 +192,158 @@ func TestCreateEmptyFileWithoutPermission(t *testing.T) {
 	_, err = client.Stat("/_test/accessdenied/emptyfile")
 	assertPathError(t, err, "stat", "/_test/accessdenied/emptyfile", os.ErrNotExist)
 }
+
+func TestFileAppend(t *testing.T) {
+	client := getClient(t)
+
+	baleet(t, "/_test/append/1.txt")
+	mkdirp(t, "/_test/append")
+	writer, err := client.Create("/_test/append/1.txt")
+	require.NoError(t, err)
+
+	n, err := writer.Write([]byte("foobar\n"))
+	require.NoError(t, err)
+	assert.Equal(t, 7, n)
+
+	err = writer.Close()
+	require.NoError(t, err)
+
+	writer, err = client.Append("/_test/append/1.txt")
+	require.NoError(t, err)
+
+	n, err = writer.Write([]byte("foo"))
+	require.NoError(t, err)
+	assert.Equal(t, 3, n)
+
+	n, err = writer.Write([]byte("baz"))
+	require.NoError(t, err)
+	assert.Equal(t, 3, n)
+
+	err = writer.Close()
+	require.NoError(t, err)
+
+	reader, err := client.Open("/_test/append/1.txt")
+	require.NoError(t, err)
+
+	bytes, err := ioutil.ReadAll(reader)
+	require.NoError(t, err)
+	assert.Equal(t, "foobar\nfoobaz", string(bytes))
+}
+
+func TestFileAppendEmptyFile(t *testing.T) {
+	client := getClient(t)
+
+	baleet(t, "/_test/append/2.txt")
+	mkdirp(t, "/_test/append")
+	err := client.CreateEmptyFile("/_test/append/2.txt")
+	require.NoError(t, err)
+
+	writer, err := client.Append("/_test/append/2.txt")
+	require.NoError(t, err)
+
+	n, err := writer.Write([]byte("foo"))
+	require.NoError(t, err)
+	assert.Equal(t, 3, n)
+
+	n, err = writer.Write([]byte("bar"))
+	require.NoError(t, err)
+	assert.Equal(t, 3, n)
+
+	err = writer.Close()
+	require.NoError(t, err)
+
+	reader, err := client.Open("/_test/append/2.txt")
+	require.NoError(t, err)
+
+	bytes, err := ioutil.ReadAll(reader)
+	require.NoError(t, err)
+	assert.Equal(t, "foobar", string(bytes))
+}
+
+func TestFileAppendLastBlockFull(t *testing.T) {
+	mobydick, err := os.Open("test/mobydick.txt")
+	require.NoError(t, err)
+
+	client := getClient(t)
+
+	baleet(t, "/_test/append/3.txt")
+	mkdirp(t, "/_test/append")
+
+	writer, err := client.CreateFile("/_test/append/3.txt", 3, 1048576, 0644)
+	require.NoError(t, err)
+
+	wn, err := io.CopyN(writer, mobydick, 1048576)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1048576, wn)
+
+	err = writer.Close()
+	require.NoError(t, err)
+
+	writer, err = client.Append("/_test/append/3.txt")
+	require.NoError(t, err)
+
+	n, err := writer.Write([]byte("\nfoo"))
+	require.NoError(t, err)
+	assert.Equal(t, 4, n)
+
+	err = writer.Close()
+	require.NoError(t, err)
+
+	reader, err := client.Open("/_test/append/3.txt")
+	require.NoError(t, err)
+
+	err = reader.getBlocks()
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, len(reader.blocks))
+
+	buf := make([]byte, 4)
+	n, err = reader.ReadAt(buf, 1048576)
+	require.NoError(t, err)
+	assert.Equal(t, 4, n)
+
+	assert.Equal(t, "\nfoo", string(buf))
+}
+
+func TestFileAppendTwice(t *testing.T) {
+	client := getClient(t)
+
+	baleet(t, "/_test/append/4.txt")
+	mkdirp(t, "/_test/append")
+	writer, err := client.Create("/_test/append/4.txt")
+	require.NoError(t, err)
+
+	n, err := writer.Write([]byte("foo"))
+	require.NoError(t, err)
+	assert.Equal(t, 3, n)
+
+	err = writer.Close()
+	require.NoError(t, err)
+
+	writer, err = client.Append("/_test/append/4.txt")
+	require.NoError(t, err)
+
+	n, err = writer.Write([]byte("bar"))
+	require.NoError(t, err)
+	assert.Equal(t, 3, n)
+
+	err = writer.Close()
+	require.NoError(t, err)
+
+	writer, err = client.Append("/_test/append/4.txt")
+	require.NoError(t, err)
+
+	n, err = writer.Write([]byte("baz"))
+	require.NoError(t, err)
+	assert.Equal(t, 3, n)
+
+	err = writer.Close()
+	require.NoError(t, err)
+
+	reader, err := client.Open("/_test/append/4.txt")
+	require.NoError(t, err)
+
+	bytes, err := ioutil.ReadAll(reader)
+	require.NoError(t, err)
+	assert.Equal(t, "foobarbaz", string(bytes))
+}
