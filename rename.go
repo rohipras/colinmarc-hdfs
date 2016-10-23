@@ -9,10 +9,14 @@ import (
 )
 
 // Rename renames (moves) a file.
-func (c *Client) Rename(oldpath, newpath string) error {
+func (c *Client) Rename(oldpath, newpath string, clobber bool) error {
 	_, err := c.getFileInfo(newpath)
 	if err == nil {
-		return &os.PathError{"rename", newpath, os.ErrExist}
+		if clobber == false {
+			// If newpath exists and func is set to no overwrite
+			// This should not be treated as an error, instead as warning
+			return &os.PathError{"rename", newpath, os.ErrExist}
+		}
 	} else if !os.IsNotExist(err) {
 		return &os.PathError{"rename", newpath, err}
 	}
@@ -20,7 +24,7 @@ func (c *Client) Rename(oldpath, newpath string) error {
 	req := &hdfs.Rename2RequestProto{
 		Src:           proto.String(oldpath),
 		Dst:           proto.String(newpath),
-		OverwriteDest: proto.Bool(true),
+		OverwriteDest: proto.Bool(clobber),
 	}
 	resp := &hdfs.Rename2ResponseProto{}
 

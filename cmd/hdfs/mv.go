@@ -64,7 +64,7 @@ func moveTo(client *hdfs.Client, source, dest string, force bool) {
 		}
 	}
 
-	err := client.Rename(source, dest)
+	err := client.Rename(source, dest, force)
 	if err != nil {
 		fatal(err)
 	}
